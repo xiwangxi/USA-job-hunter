@@ -1,10 +1,12 @@
 name: Daily US Job Hunt
 
 on:
-  schedule:
-    # 13:00 UTC = 09:00 America/New_York during EDT (夏令时，3月-11月)
-    # 冬令时 (EST，11月-次年3月) 需改为 '0 14 * * *'，或参见 README 中的自动切换说明
-    - cron: "0 13 * * *"
+  # 定时任务已暂停（应用户要求停用，不再自动运行/自动发邮件）。
+  # 如需恢复，取消下面 schedule 块的注释即可。
+  # schedule:
+  #   # 13:00 UTC = 09:00 America/New_York during EDT (夏令时，3月-11月)
+  #   # 冬令时 (EST，11月-次年3月) 需改为 '0 14 * * *'，或参见 README 中的自动切换说明
+  #   - cron: "0 13 * * *"
   workflow_dispatch: {}
 
 permissions:
