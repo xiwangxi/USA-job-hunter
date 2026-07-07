@@ -61,6 +61,7 @@ python main.py
 | AI 打分 | Anthropic API | https://console.anthropic.com/ | 必填 |
 | 职位搜索 | Adzuna API | https://developer.adzuna.com/ （免费注册即得 app_id / app_key） | 可选（建议填） |
 | 职位搜索 | USAJobs API | https://developer.usajobs.gov/apidocs （需要一个邮箱作为 User-Agent） | 可选 |
+| 历史签证数据 | api.data.gov | https://api.data.gov/signup/ （免费注册即得 key，几秒钟拿到；不填会自动退回公共的 `DEMO_KEY`，对我们这种低频调用够用，但更稳） | 可选 |
 | 发邮件 | Resend（推荐） | https://resend.com/ （免费额度：每天 100 封 / 每月 3000 封，HTTP API 无需 SMTP 密码） | 三选一 |
 | 发邮件 | SendGrid | https://sendgrid.com/ | 三选一 |
 | 发邮件 | Gmail SMTP | 无需注册第三方服务，只需一个 [Google 账号应用专用密码](https://myaccount.google.com/apppasswords)（要求开启两步验证） | 三选一 |
@@ -85,6 +86,9 @@ Adzuna（推荐填，职位来源之一）：
 USAJobs（可选，联邦职位大概率要求美国公民，会被签证过滤器剔除大部分）：
 - `USAJOBS_API_KEY`
 - `USAJOBS_USER_AGENT_EMAIL`
+
+历史签证担保数据（可选，不填会用公共 `DEMO_KEY`，见下面「历史签证担保数据」一节）：
+- `DATA_GOV_API_KEY`
 
 邮件（三选一）：
 - Resend: `RESEND_API_KEY`, `EMAIL_FROM`（在 Resend 后台验证过的发件地址，测试阶段可先用
@@ -181,10 +185,13 @@ prompt 里，也会显示在邮件对应职位下面（比如"公开数据：该
   找到当前最新一期 "H-1B Disclosure Data" 文件（xlsx 格式）的下载直链，填进
   `sponsorship_data.resource_url`。这个文件每季度换一次，需要你偶尔手动更新一下这个链接
   （比如每季度看一眼）。
-- 如果 `resource_url` 留空，程序会尝试通过 data.gov 的开放数据 API（CKAN）自动找最新一期文件：
-  先按 `dataset_id`（如果填了）精确查一次，查不到或没填就按 `search_query` 关键词搜索——
-  实测发现 data.gov 的数据集 slug/ID 会变（第一版硬编码的 ID 已经在真实运行中遇到 404，
-  已改成关键词搜索为主），图省事但仍不如手动填 `resource_url` 可靠。
+- 如果 `resource_url` 留空，程序会尝试通过 data.gov 的开放数据接口自动找最新一期文件：
+  先按 `dataset_id`（如果填了）精确查一次，查不到或没填就按 `search_query` 关键词搜索。
+  data.gov 在 2026 年把旧的 `catalog.data.gov` CKAN 接口换成了新的 GSA 托管接口
+  （`api.gsa.gov/technology/datagov`），调用需要一个 api.data.gov 的 API key——不填
+  `DATA_GOV_API_KEY` 的话会自动用公共的 `DEMO_KEY`，配额较低但对我们这种一个月才刷新
+  一次的调用频率完全够用；想更稳可以去 https://api.data.gov/signup/ 免费注册一个自己的
+  key（几秒钟就能拿到，不需要审核）。这套自动发现图省事但仍不如手动填 `resource_url` 可靠。
 - 数据每季度才更新，所以不会每天都重新下载，由 `refresh_max_age_days`（默认 30 天）控制
   多久重新抓一次；抓取结果缓存在 `jobs.db` 里的两张新表（`employer_sponsorship` /
   `sponsorship_meta`），随 `jobs.db` 一起持久化。
@@ -199,11 +206,13 @@ prompt 里，也会显示在邮件对应职位下面（比如"公开数据：该
    程序会先做精确匹配（自动去掉 Inc/LLC/Corp 等后缀再比较），匹配不上的话可以在
    `companies.yaml` 对应公司条目里加一个 `legal_name` 字段手动指定，`SpaceX` 已经作为示例
    配好了。查不到匹配的公司，AI 打分时就是"没有这项数据"，不会瞎猜。
-2. **data.gov 自动发现这条路已经在真实环境里踩过一次坑**：第一版硬编码的 `dataset_id`
-   在真实 GitHub Actions 运行中实测返回 404（data.gov 的数据集 slug 变了），已经改成
-   优先用 `search_query` 关键词搜索、`dataset_id` 只作为可选的快速路径。**建议你留意每次
-   运行日志里 `job_hunter.sponsorship_data` 相关的 INFO/WARNING/ERROR**，确认它真的抓到数据了；
-   如果关键词搜索哪天又失效了，按上面说的手动填 `resource_url` 是最不容易坏的方案。
+2. **data.gov 自动发现这条路在真实环境里连续踩过两次坑**：先是硬编码的 `dataset_id` 返回
+   404（data.gov 数据集 slug 变了），改成关键词搜索后又发现整个旧版 `catalog.data.gov`
+   接口都已经 404——根本原因是 data.gov 在 2026 年把 API 迁移到了新的 GSA 托管接口，
+   需要 API key 认证，已经改成调用新接口。**这条自动发现链路目前依然属于"跟着政府网站
+   的变化在追"，长期最稳的做法还是手动填 `resource_url`**；如果你发现某天运行日志里
+   `job_hunter.sponsorship_data` 又开始报错，大概率是 data.gov 那边接口又变了，来这个仓库
+   看看有没有更新，或者干脆切到手动填 `resource_url` 一劳永逸。
 3. 数据是"当季快照"，不是历史累计——只反映最近一个季度提交的申请，不代表这家公司过去
    几年的全部担保记录。
 
