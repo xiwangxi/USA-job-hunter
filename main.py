@@ -16,6 +16,7 @@ import yaml
 
 import db
 import notify
+import sponsorship_data
 from filters import count_keyword_hits, has_positive_sponsorship_phrase, rule_reject_reason
 from scoring import get_client, score_job
 from sources import adzuna, ats_boards, usajobs
@@ -88,6 +89,25 @@ def run(config: dict, dry_run: bool) -> int:
 
     conn = db.connect(config["database"]["path"])
 
+    sponsorship_cfg = config.get("sponsorship_data", {})
+    legal_name_overrides: dict[str, str] = {}
+    if sponsorship_cfg.get("enabled"):
+        try:
+            sponsorship_data.refresh_if_stale(
+                conn,
+                dataset_id=sponsorship_cfg.get("dataset_id", ""),
+                resource_url=sponsorship_cfg.get("resource_url", ""),
+                max_age_days=sponsorship_cfg.get("refresh_max_age_days", 30),
+            )
+        except Exception:
+            logger.exception("Sponsorship-data refresh failed; continuing without it")
+        companies_file = config.get("sources", {}).get("ats_boards", {}).get("companies_file", "companies.yaml")
+        legal_name_overrides = {
+            entry["name"]: entry["legal_name"]
+            for entry in ats_boards.load_companies(companies_file)
+            if entry.get("legal_name")
+        }
+
     all_jobs = fetch_all_jobs(config, stats)
 
     search_cfg = config["search"]
@@ -147,15 +167,24 @@ def run(config: dict, dry_run: bool) -> int:
     score_threshold = scoring_cfg.get("score_threshold", 60)
     reject_sponsorship = set(scoring_cfg.get("reject_sponsorship_likelihood", ["unlikely"]))
 
+    stats["sponsorship_history_matches"] = 0
     if to_score:
         client = get_client()
         for job in to_score:
+            sponsorship_history = None
+            if sponsorship_cfg.get("enabled"):
+                sponsorship_history = sponsorship_data.lookup(
+                    conn, job.get("company", ""), legal_name_overrides.get(job.get("company", ""))
+                )
+                if sponsorship_history:
+                    stats["sponsorship_history_matches"] += 1
             result = score_job(
                 client,
                 model=scoring_cfg["model"],
                 max_tokens=scoring_cfg.get("max_tokens", 300),
                 candidate_profile=config["candidate_profile"],
                 job=job,
+                sponsorship_history=sponsorship_history,
             )
             if result is None:
                 continue
@@ -172,7 +201,7 @@ def run(config: dict, dry_run: bool) -> int:
                     notified=passed,
                 )
             if passed:
-                notified_jobs.append({**job, **result})
+                notified_jobs.append({**job, **result, "_sponsorship_history": sponsorship_history})
 
     stats["final_notified"] = len(notified_jobs)
 
@@ -183,6 +212,9 @@ def run(config: dict, dry_run: bool) -> int:
             print(f"[{job['score']:3d}] {job['title']} @ {job['company']} ({job['location']})")
             print(f"      sponsorship={job['sponsorship_likelihood']} seniority={job['seniority_fit']}")
             print(f"      {job['one_line_reason']}")
+            if job.get("_sponsorship_history"):
+                h = job["_sponsorship_history"]
+                print(f"      历史签证数据: {h['case_count']} 起申请, {h['certified_count']} 起获批")
             print(f"      {job['url']}\n")
         if not notified_jobs:
             print("(no new matching jobs today)")
@@ -196,6 +228,7 @@ def run(config: dict, dry_run: bool) -> int:
         "去重后新职位": stats["new_after_dedup"],
         "规则剔除(签证)": stats["rule_rejected"],
         "送 AI 打分": stats["sent_to_ai"],
+        "其中匹配到历史签证数据": stats["sponsorship_history_matches"],
         "最终推送": stats["final_notified"],
     })
     ok = notify.send_daily_email(

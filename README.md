@@ -13,6 +13,7 @@ companies.yaml         # 目标公司清单及其 ATS 类型/token
 db.py                 # SQLite 去重存储 (jobs.db)
 filters.py            # 关键词粗筛 + 签证规则过滤（纯函数，易单测）
 scoring.py            # 调用 Anthropic API 做 AI 匹配打分
+sponsorship_data.py    # DOL 历史签证担保数据（H-1B/LCA）查询，给 AI 判断提供真实数据佐证
 notify.py             # 生成 HTML 邮件并通过 Resend/SendGrid/Gmail 发送
 sources/
   adzuna.py            # Adzuna API 适配器
@@ -167,6 +168,44 @@ ATS 端点，不爬 LinkedIn/Indeed 页面"这一约束下的已知限制）。
   规则剔除数、送 AI 打分数、最终推送数。
 - 没有新职位时会发一封简短的"今日无新增"邮件，用于确认程序仍在正常运行。
 
+## 历史签证担保数据（H-1B/LCA disclosure data）
+
+签证判断原本完全靠 AI 猜职位描述的字面意思，容易被职位描述里没提到签证的情况带偏。
+这个功能给 AI 提供一个真实数据佐证：从美国劳工部（DOL）公开的 LCA（H-1B/H-1B1/E-3）
+披露数据里查这家公司历史上提交过多少次相关申请、批了多少次，把这个数字写进 AI 打分的
+prompt 里，也会显示在邮件对应职位下面（比如"公开数据：该公司近期披露 12 起 H-1B/E-3
+申请，10 起获批（约 83%）"）。
+
+**如何配置**：`config.yaml` 的 `sponsorship_data` 一节。
+- 最推荐的方式：自己去 https://www.dol.gov/agencies/eta/foreign-labor/performance
+  找到当前最新一期 "H-1B Disclosure Data" 文件（xlsx 格式）的下载直链，填进
+  `sponsorship_data.resource_url`。这个文件每季度换一次，需要你偶尔手动更新一下这个链接
+  （比如每季度看一眼）。
+- 如果 `resource_url` 留空，程序会尝试通过 data.gov 的开放数据 API（CKAN，
+  `catalog.data.gov/api/3/action/package_show`）自动找最新一期文件——图省事但不如手动填
+  可靠，这个数据集的接口结构如果被 DOL/data.gov 调整过，自动发现可能会失效。
+- 数据每季度才更新，所以不会每天都重新下载，由 `refresh_max_age_days`（默认 30 天）控制
+  多久重新抓一次；抓取结果缓存在 `jobs.db` 里的两张新表（`employer_sponsorship` /
+  `sponsorship_meta`），随 `jobs.db` 一起持久化。
+- 不想用这个功能就把 `sponsorship_data.enabled` 设为 `false`，其余流程完全不受影响。
+- 这张缓存表不受 `--dry-run` 影响（`--dry-run` 只是不把职位写入去重库、不发邮件，跟"当天处理
+  进度"无关的这张参考数据表照常按 `refresh_max_age_days` 的节奏刷新/复用），方便本地反复
+  测试时不用每次都重新下载。
+
+**已知的局限，务必了解**：
+1. **公司名匹配是最大的短板**：政府披露数据里存的是公司的"法律实体名"，跟职位页面上的
+   品牌名往往对不上（比如 SpaceX 的法律实体名是 "Space Exploration Technologies Corp"）。
+   程序会先做精确匹配（自动去掉 Inc/LLC/Corp 等后缀再比较），匹配不上的话可以在
+   `companies.yaml` 对应公司条目里加一个 `legal_name` 字段手动指定，`SpaceX` 已经作为示例
+   配好了。查不到匹配的公司，AI 打分时就是"没有这项数据"，不会瞎猜。
+2. **这个自动化流程本身没有在真实环境跑通验证过**：开发这个功能时的沙盒环境网络策略连不上
+   dol.gov / data.gov，所以下载和解析这部分只做了用假数据模拟的单元测试，逻辑测试通过，
+   但**第一次在 GitHub Actions 里实际跑的时候请留意日志**，确认它真的抓到数据了
+   （日志里会有 `job_hunter.sponsorship_data` 相关的 INFO/WARNING/ERROR）。如果自动发现失败，
+   按上面说的手动填 `resource_url` 是更可靠的备选方案。
+3. 数据是"当季快照"，不是历史累计——只反映最近一个季度提交的申请，不代表这家公司过去
+   几年的全部担保记录。
+
 ## 已知限制
 
 - Adzuna 免费 API 返回的是职位描述的**摘要/片段**而非完整正文，签证过滤和 AI 打分的
@@ -185,3 +224,5 @@ ATS 端点，不爬 LinkedIn/Indeed 页面"这一约束下的已知限制）。
 - [ ] 收到邮件，格式清晰（或收到"今日无新增"确认邮件）
 - [ ] `jobs.db` 在 workflow 运行后被自动提交回仓库
 - [ ] 需要时能自行编辑 `companies.yaml` / `config.yaml` 调整公司、关键词、阈值
+- [ ] 查看一次运行日志，确认历史签证担保数据（`sponsorship_data`）成功抓取（或按 README
+      说明手动填 `resource_url` 后再确认一次）

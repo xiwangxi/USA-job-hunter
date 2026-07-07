@@ -24,6 +24,19 @@ SPONSORSHIP_BADGE = {
 }
 
 
+def _sponsorship_history_html(history: dict | None) -> str:
+    if not history:
+        return ""
+    case_count = history.get("case_count", 0)
+    certified_count = history.get("certified_count", 0)
+    rate = f"{certified_count / case_count:.0%}" if case_count else "N/A"
+    return (
+        f'<br/><span style="color:#0369a1;font-size:12px;">'
+        f"公开数据：该公司近期披露 {case_count} 起 H-1B/E-3 申请，{certified_count} 起获批（约 {rate}）"
+        f"</span>"
+    )
+
+
 def _job_row_html(job: dict) -> str:
     color, bg, label = SPONSORSHIP_BADGE.get(job["sponsorship_likelihood"], SPONSORSHIP_BADGE["unclear"])
     title = html_lib.escape(job.get("title", ""))
@@ -32,12 +45,13 @@ def _job_row_html(job: dict) -> str:
     reason = html_lib.escape(job.get("one_line_reason", ""))
     url = html_lib.escape(job.get("url", "#"))
     score = job.get("score", 0)
+    history_html = _sponsorship_history_html(job.get("_sponsorship_history"))
     return f"""
     <tr style="border-bottom:1px solid #e5e7eb;">
       <td style="padding:10px 8px;">
         <a href="{url}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{title}</a><br/>
         <span style="color:#4b5563;font-size:13px;">{company} · {location}</span><br/>
-        <span style="color:#374151;font-size:13px;">{reason}</span>
+        <span style="color:#374151;font-size:13px;">{reason}</span>{history_html}
       </td>
       <td style="padding:10px 8px;text-align:center;font-weight:700;font-size:16px;">{score}</td>
       <td style="padding:10px 8px;text-align:center;">

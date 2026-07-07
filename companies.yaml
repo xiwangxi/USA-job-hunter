@@ -7,6 +7,11 @@
 #           Jobvite / UltiPro / Oracle Cloud 等自建或第三方系统），没有公开匿名 JSON
 #           接口，程序会跳过该公司，仅作记录，可自行去官网手动查看）
 #   token: 对应 ATS 的 board token / slug。ats 为 none 时留空。
+#   legal_name: 该公司在美国政府签证担保披露数据（DOL LCA/H-1B）里登记用的法律实体名，
+#               仅当它跟品牌名差别很大时才需要填（比如 SpaceX 的法律实体名是
+#               "Space Exploration Technologies Corp"）。用于 sponsorship_data.py
+#               做历史签证担保记录匹配，不填就用 name 直接匹配（品牌名=法律实体名的
+#               公司，比如 Formlabs、Markforged，通常不需要填这个字段）。
 #   note:  备注（可选）
 #
 # 如何验证/更新 token：
@@ -114,6 +119,7 @@ companies:
   - name: "SpaceX"
     ats: "greenhouse"
     token: "spacex"
+    legal_name: "Space Exploration Technologies Corp"
   - name: "Boeing Additive"
     ats: "none"
     token: null
