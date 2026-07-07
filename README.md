@@ -181,9 +181,10 @@ prompt 里，也会显示在邮件对应职位下面（比如"公开数据：该
   找到当前最新一期 "H-1B Disclosure Data" 文件（xlsx 格式）的下载直链，填进
   `sponsorship_data.resource_url`。这个文件每季度换一次，需要你偶尔手动更新一下这个链接
   （比如每季度看一眼）。
-- 如果 `resource_url` 留空，程序会尝试通过 data.gov 的开放数据 API（CKAN，
-  `catalog.data.gov/api/3/action/package_show`）自动找最新一期文件——图省事但不如手动填
-  可靠，这个数据集的接口结构如果被 DOL/data.gov 调整过，自动发现可能会失效。
+- 如果 `resource_url` 留空，程序会尝试通过 data.gov 的开放数据 API（CKAN）自动找最新一期文件：
+  先按 `dataset_id`（如果填了）精确查一次，查不到或没填就按 `search_query` 关键词搜索——
+  实测发现 data.gov 的数据集 slug/ID 会变（第一版硬编码的 ID 已经在真实运行中遇到 404，
+  已改成关键词搜索为主），图省事但仍不如手动填 `resource_url` 可靠。
 - 数据每季度才更新，所以不会每天都重新下载，由 `refresh_max_age_days`（默认 30 天）控制
   多久重新抓一次；抓取结果缓存在 `jobs.db` 里的两张新表（`employer_sponsorship` /
   `sponsorship_meta`），随 `jobs.db` 一起持久化。
@@ -198,11 +199,11 @@ prompt 里，也会显示在邮件对应职位下面（比如"公开数据：该
    程序会先做精确匹配（自动去掉 Inc/LLC/Corp 等后缀再比较），匹配不上的话可以在
    `companies.yaml` 对应公司条目里加一个 `legal_name` 字段手动指定，`SpaceX` 已经作为示例
    配好了。查不到匹配的公司，AI 打分时就是"没有这项数据"，不会瞎猜。
-2. **这个自动化流程本身没有在真实环境跑通验证过**：开发这个功能时的沙盒环境网络策略连不上
-   dol.gov / data.gov，所以下载和解析这部分只做了用假数据模拟的单元测试，逻辑测试通过，
-   但**第一次在 GitHub Actions 里实际跑的时候请留意日志**，确认它真的抓到数据了
-   （日志里会有 `job_hunter.sponsorship_data` 相关的 INFO/WARNING/ERROR）。如果自动发现失败，
-   按上面说的手动填 `resource_url` 是更可靠的备选方案。
+2. **data.gov 自动发现这条路已经在真实环境里踩过一次坑**：第一版硬编码的 `dataset_id`
+   在真实 GitHub Actions 运行中实测返回 404（data.gov 的数据集 slug 变了），已经改成
+   优先用 `search_query` 关键词搜索、`dataset_id` 只作为可选的快速路径。**建议你留意每次
+   运行日志里 `job_hunter.sponsorship_data` 相关的 INFO/WARNING/ERROR**，确认它真的抓到数据了；
+   如果关键词搜索哪天又失效了，按上面说的手动填 `resource_url` 是最不容易坏的方案。
 3. 数据是"当季快照"，不是历史累计——只反映最近一个季度提交的申请，不代表这家公司过去
    几年的全部担保记录。
 
