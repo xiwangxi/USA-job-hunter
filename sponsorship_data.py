@@ -6,16 +6,22 @@ many LCA cases (H-1B / H-1B1 / E-3) an employer has filed and how many were
 certified.
 
 Data source: DOL Office of Foreign Labor Certification quarterly LCA
-disclosure files (public, no API key needed). The exact download link
-changes every quarter, so this module either uses an explicit
-`resource_url` from config (recommended — see README) or tries to discover
-the latest file via the data.gov CKAN API. Both paths are best-effort: any
-failure just disables sponsorship enrichment for that run, it never breaks
-the rest of the pipeline.
+disclosure files. The exact download link changes every quarter, so this
+module either uses an explicit `resource_url` from config (recommended --
+see README) or tries to discover the latest file via data.gov's catalog
+API. As of 2026 data.gov relaunched its catalog on a new GSA-hosted API
+(api.gsa.gov/technology/datagov) -- the old catalog.data.gov CKAN endpoints
+stopped responding, which is why this needs an api.data.gov API key
+(DATA_GOV_API_KEY env var; falls back to the public DEMO_KEY, which is
+fine for our call volume -- at most once a day, usually once a month
+thanks to caching). Both discovery paths are best-effort: any failure just
+disables sponsorship enrichment for that run, it never breaks the rest of
+the pipeline.
 """
 
 import io
 import logging
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -43,8 +49,13 @@ CREATE TABLE IF NOT EXISTS sponsorship_meta (
 );
 """
 
-CKAN_PACKAGE_SHOW_URL = "https://catalog.data.gov/api/3/action/package_show"
-CKAN_PACKAGE_SEARCH_URL = "https://catalog.data.gov/api/3/action/package_search"
+DATAGOV_API_BASE = "https://api.gsa.gov/technology/datagov/v3/action"
+CKAN_PACKAGE_SHOW_URL = f"{DATAGOV_API_BASE}/package_show"
+CKAN_PACKAGE_SEARCH_URL = f"{DATAGOV_API_BASE}/package_search"
+
+
+def _datagov_api_key() -> str:
+    return os.environ.get("DATA_GOV_API_KEY") or "DEMO_KEY"
 
 EMPLOYER_NAME_CANDIDATES = ["EMPLOYER_NAME", "EMPLOYER NAME", "PETITIONER_NAME", "EMPLOYER_NAME (PETITIONER)"]
 CASE_STATUS_CANDIDATES = ["CASE_STATUS", "STATUS"]
@@ -107,10 +118,12 @@ def _pick_best_h1b_resource(resources: list) -> tuple | None:
 
 
 def _discover_resource_url(dataset_id: str, search_query: str) -> str | None:
+    api_key = _datagov_api_key()
+
     # Fast path: caller knows the exact CKAN package slug.
     if dataset_id:
         try:
-            resp = requests.get(CKAN_PACKAGE_SHOW_URL, params={"id": dataset_id}, timeout=30)
+            resp = requests.get(CKAN_PACKAGE_SHOW_URL, params={"id": dataset_id, "api_key": api_key}, timeout=30)
             resp.raise_for_status()
             resources = (resp.json().get("result") or {}).get("resources", [])
             best = _pick_best_h1b_resource(resources)
@@ -126,7 +139,9 @@ def _discover_resource_url(dataset_id: str, search_query: str) -> str | None:
     # Resilient fallback: search by keywords instead of relying on an exact,
     # easily-outdated package slug (data.gov dataset slugs/ids do change).
     try:
-        resp = requests.get(CKAN_PACKAGE_SEARCH_URL, params={"q": search_query, "rows": 10}, timeout=30)
+        resp = requests.get(
+            CKAN_PACKAGE_SEARCH_URL, params={"q": search_query, "rows": 10, "api_key": api_key}, timeout=30
+        )
         resp.raise_for_status()
         results = ((resp.json().get("result") or {}).get("results")) or []
     except requests.RequestException:
