@@ -1,0 +1,139 @@
+# US Job Hunter 配置文件
+# 修改本文件即可调整搜索关键词、打分阈值、签证过滤短语等，无需改代码。
+
+candidate_profile: |
+  CANDIDATE PROFILE
+  - Citizenship: German (EU citizen). Currently residing in Switzerland.
+  - Work authorization: NO US work authorization. REQUIRES visa sponsorship
+    (e.g., H-1B, O-1, E-3 not applicable, L-1 only via intra-company transfer).
+  - Education:
+    - B.Sc. Mechanical Engineering, Technical University of Munich (TUM)
+    - M.Sc. Aerospace/Aeronautical Engineering, TUM
+    - Ph.D. (Dr.-Ing.), TUM — Metal Additive Manufacturing / 3D printing
+      (LPBF / SLM, laser powder bed fusion, metal AM process development)
+  - Work experience: ~1 year at Ivoclar (Liechtenstein), R&D Engineer,
+    3D printing of dental restorations/teeth (dental additive manufacturing,
+    medical device R&D environment)
+  - Languages: German (native), English (fluent)
+  - Target seniority: Engineer / Senior Engineer / Scientist / Senior Scientist,
+    R&D roles. PhD-level positions preferred. Exclude internships, working
+    student, and Director/VP-level roles.
+
+# ---------------------------------------------------------------------------
+# 搜索关键词（OR 关系）：职位标题/描述命中任意一个短语即可进入粗筛
+# ---------------------------------------------------------------------------
+search:
+  keywords:
+    - "Additive Manufacturing Engineer"
+    - "Additive Manufacturing"
+    - "AM Process Engineer"
+    - "AM R&D"
+    - "Metal 3D Printing"
+    - "LPBF"
+    - "SLM"
+    - "DMLS"
+    - "Laser Powder Bed Fusion"
+    - "3D Printing Engineer"
+    - "3D Printing Scientist"
+    - "Dental 3D Printing"
+    - "Digital Dentistry"
+    - "Materials Engineer Additive"
+    - "R&D Engineer Medical Device"
+    - "Process Development Engineer"
+  # 地点：为空数组表示不限州；Adzuna 等 API 会额外限定为美国境内
+  locations: []
+  include_remote: true
+  country: "us"
+
+# ---------------------------------------------------------------------------
+# 粗筛（规则）：控制送去 AI 打分的职位数量，节省 API 成本
+# ---------------------------------------------------------------------------
+prefilter:
+  # 标题或描述中命中的关键词个数达到该值才送 AI 打分
+  min_keyword_hits: 1
+  # 每次运行最多送多少个职位给 AI 打分
+  max_jobs_to_ai_per_run: 80
+
+# ---------------------------------------------------------------------------
+# AI 打分
+# ---------------------------------------------------------------------------
+scoring:
+  # Anthropic 模型名。原始需求文档中写的 "claude-sonnet-4-6" 并非一个真实存在的模型 ID，
+  # 这里改用当前实际可用的 claude-sonnet-5；后续如有更新模型可直接改这一行，无需改代码。
+  model: "claude-sonnet-5"
+  max_tokens: 300
+  # 入选邮件所需的最低分数
+  score_threshold: 60
+  # sponsorship_likelihood 取值为该列表之一时，无论分数多高都不进入邮件
+  reject_sponsorship_likelihood:
+    - "unlikely"
+
+# ---------------------------------------------------------------------------
+# 签证/工作授权过滤（第一层，规则剔除）
+# 命中以下任意短语（小写子串匹配）的职位描述直接丢弃，不再进入粗筛/AI 打分
+# 可自行增删短语
+# ---------------------------------------------------------------------------
+visa_filter:
+  reject_phrases:
+    - "u.s. citizens only"
+    - "us citizens only"
+    - "must be a u.s. citizen"
+    - "must be a us citizen"
+    - "united states citizens only"
+    - "no sponsorship"
+    - "not provide sponsorship"
+    - "unable to sponsor"
+    - "will not sponsor"
+    - "does not sponsor"
+    - "cannot sponsor"
+    - "can not sponsor"
+    - "no visa sponsorship"
+    - "sponsorship is not available"
+    - "sponsorship will not be provided"
+    - "not able to offer sponsorship"
+    - "not eligible for visa sponsorship"
+    - "must be authorized to work in the united states without sponsorship"
+    - "must be authorized to work in the us without sponsorship"
+    - "without the need for employer sponsorship"
+    - "must be a us person"
+    - "must be a u.s. person"
+    - "security clearance required"
+    - "active security clearance"
+    - "ability to obtain a security clearance"
+    - "eligible to obtain a security clearance"
+  # 明确写出提供签证担保的正向短语（AI 判断阶段会优先标绿，不用于规则剔除）
+  positive_phrases:
+    - "visa sponsorship available"
+    - "we sponsor visas"
+    - "sponsorship available for this role"
+    - "will sponsor"
+
+# ---------------------------------------------------------------------------
+# 数据源
+# ---------------------------------------------------------------------------
+sources:
+  adzuna:
+    enabled: true
+    country: "us"
+    results_per_keyword: 20
+  usajobs:
+    enabled: true
+    results_per_keyword: 20
+  ats_boards:
+    enabled: true
+    request_delay_seconds: 1.5
+    user_agent: "USA-Job-Hunter/1.0 (personal job search bot)"
+    companies_file: "companies.yaml"
+
+# ---------------------------------------------------------------------------
+# 邮件
+# ---------------------------------------------------------------------------
+email:
+  provider: "resend"   # resend | sendgrid | gmail_smtp
+  subject_prefix: "[US Job Hunter]"
+
+# ---------------------------------------------------------------------------
+# 数据库
+# ---------------------------------------------------------------------------
+database:
+  path: "jobs.db"
