@@ -1,0 +1,64 @@
+name: Daily US Job Hunt
+
+on:
+  schedule:
+    # 13:00 UTC = 09:00 America/New_York during EDT (夏令时，3月-11月)
+    # 冬令时 (EST，11月-次年3月) 需改为 '0 14 * * *'，或参见 README 中的自动切换说明
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: job-hunter-daily
+  cancel-in-progress: false
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run job hunter
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          USAJOBS_API_KEY: ${{ secrets.USAJOBS_API_KEY }}
+          USAJOBS_USER_AGENT_EMAIL: ${{ secrets.USAJOBS_USER_AGENT_EMAIL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          GMAIL_SMTP_USER: ${{ secrets.GMAIL_SMTP_USER }}
+          GMAIL_SMTP_APP_PASSWORD: ${{ secrets.GMAIL_SMTP_APP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python main.py
+
+      - name: Persist jobs.db back to the repo
+        run: |
+          git config user.name "job-hunter-bot"
+          git config user.email "job-hunter-bot@users.noreply.github.com"
+          if [ -n "$(git status --porcelain -- jobs.db)" ]; then
+            git add jobs.db
+            git commit -m "chore: update jobs.db [skip ci]"
+            for i in 1 2 3 4; do
+              if git push; then
+                break
+              fi
+              echo "push failed, retrying ($i)..."
+              sleep $((2 ** i))
+              git pull --rebase
+            done
+          else
+            echo "jobs.db unchanged, nothing to commit"
+          fi

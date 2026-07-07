@@ -1,0 +1,130 @@
+# 目标公司清单（用于轮询 ATS 公开职位接口）
+#
+# 每一项字段：
+#   name:  公司名称（仅用于展示）
+#   ats:   greenhouse | lever | ashby | none
+#          （none 表示该公司未使用这三种 ATS（多为 Workday / Taleo / SmartRecruiters /
+#           Jobvite / UltiPro / Oracle Cloud 等自建或第三方系统），没有公开匿名 JSON
+#           接口，程序会跳过该公司，仅作记录，可自行去官网手动查看）
+#   token: 对应 ATS 的 board token / slug。ats 为 none 时留空。
+#   note:  备注（可选）
+#
+# 如何验证/更新 token：
+#   - Greenhouse: 打开公司招聘页，URL 形如 https://job-boards.greenhouse.io/<token>/jobs/...
+#     （旧域名 boards.greenhouse.io/<token> 也可能仍在用）
+#     或直接访问 https://boards-api.greenhouse.io/v1/boards/<token>/jobs 看是否返回 JSON
+#   - Lever:      招聘页 URL 形如 https://jobs.lever.co/<token>
+#     或访问 https://api.lever.co/v0/postings/<token>?mode=json
+#   - Ashby:      招聘页 URL 形如 https://jobs.ashbyhq.com/<token>
+#     或访问 https://api.ashbyhq.com/posting-api/job-board/<token>
+#   找到后把 token 填进来即可，不需要改代码。
+#
+# 以下 token 已通过搜索引擎结果中出现的具体职位链接核实（而非仅猜测公司名），
+# 但本环境无法直接发起 HTTP 请求验证接口返回，建议首次使用前按 README
+# 「验证公司 ATS token」一节自行核对一次。
+
+companies:
+  # --- Additive Manufacturing 设备/材料 ---
+  - name: "Stratasys"
+    ats: "none"
+    token: null
+    note: "使用自建/Avature 类招聘门户 careers.stratasys.com，无公开 JSON 接口"
+  - name: "3D Systems"
+    ats: "none"
+    token: null
+    note: "使用 Oracle Taleo (dddsystems.taleo.net)，无公开 JSON 接口"
+  - name: "Desktop Metal"
+    ats: "greenhouse"
+    token: "desktopmetal"
+  - name: "Formlabs"
+    ats: "greenhouse"
+    token: "formlabs"
+  - name: "Markforged"
+    ats: "greenhouse"
+    token: "markforged"
+  - name: "Carbon"
+    ats: "greenhouse"
+    token: "carbon"
+    note: "即 carbon3d.com"
+  - name: "Velo3D"
+    ats: "lever"
+    token: "velo3d"
+  - name: "EOS North America"
+    ats: "none"
+    token: null
+    note: "德国 EOS GmbH 美国分部，招聘门户未找到公开 ATS 接口"
+  - name: "Nikon SLM Solutions"
+    ats: "none"
+    token: null
+    note: "自建招聘门户 (slm-solutions.com)，无公开 JSON 接口"
+  - name: "Colibrium Additive (GE Additive)"
+    ats: "none"
+    token: null
+    note: "现隶属 GE Aerospace，使用 Workday (geaerospace.wd5.myworkdayjobs.com)，无公开 JSON 接口"
+  - name: "HP Inc (Additive/Personalization)"
+    ats: "none"
+    token: null
+    note: "使用 Workday (hp.wd5.myworkdayjobs.com)，无公开 JSON 接口"
+  - name: "Divergent Technologies"
+    ats: "greenhouse"
+    token: "divergent"
+
+  # --- 牙科/医疗 ---
+  - name: "Align Technology"
+    ats: "none"
+    token: null
+    note: "使用 Workday (aligntech.wd*.myworkdayjobs.com)，无公开 JSON 接口"
+  - name: "Dentsply Sirona"
+    ats: "none"
+    token: null
+    note: "使用自建/Avature 类招聘门户 careers.dentsplysirona.com，无公开 JSON 接口"
+  - name: "Straumann Group (US)"
+    ats: "none"
+    token: null
+    note: "使用 SmartRecruiters (careers.smartrecruiters.com/StraumannGroup1)，接口格式与本程序支持的三种 ATS 不同，暂未接入"
+  - name: "Envista / Nobel Biocare"
+    ats: "none"
+    token: null
+    note: "使用 Workday (envista.wd1.myworkdayjobs.com)，无公开 JSON 接口"
+  - name: "SprintRay"
+    ats: "greenhouse"
+    token: "sprintray"
+  - name: "Glidewell"
+    ats: "none"
+    token: null
+    note: "使用 Jobvite (jobs.jobvite.com/glidewelldental)，无公开 JSON 接口"
+  - name: "Ivoclar North America"
+    ats: "none"
+    token: null
+    note: "使用 UKG/UltiPro (recruiting.ultipro.com/IVO1000IVOCL)，无公开 JSON 接口"
+
+  # --- 航空航天（注意：多数要求 US Person / Security Clearance，靠过滤器剔除） ---
+  - name: "Relativity Space"
+    ats: "greenhouse"
+    token: "relativity"
+  - name: "Rocket Lab"
+    ats: "greenhouse"
+    token: "rocketlab"
+  - name: "Blue Origin"
+    ats: "none"
+    token: null
+    note: "使用 Workday (blueorigin.wd5.myworkdayjobs.com)，无公开 JSON 接口"
+  - name: "SpaceX"
+    ats: "greenhouse"
+    token: "spacex"
+  - name: "Boeing Additive"
+    ats: "none"
+    token: null
+    note: "使用 Workday (boeing.wd1.myworkdayjobs.com)，无公开 JSON 接口，且未区分 AM 专属分部"
+  - name: "RTX / Pratt & Whitney"
+    ats: "none"
+    token: null
+    note: "使用 Workday，无公开 JSON 接口；多数职位要求美国公民/安全审查"
+  - name: "GE Aerospace"
+    ats: "none"
+    token: null
+    note: "使用 Workday (geaerospace.wd5.myworkdayjobs.com)，无公开 JSON 接口"
+  - name: "Honeywell Aerospace"
+    ats: "none"
+    token: null
+    note: "使用 Oracle Cloud Recruiting，无公开 JSON 接口"
