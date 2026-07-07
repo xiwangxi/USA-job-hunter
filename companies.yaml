@@ -36,6 +36,7 @@ companies:
   - name: "Desktop Metal"
     ats: "greenhouse"
     token: "desktopmetal"
+    note: "token 已确认正确（招聘页 job-boards.greenhouse.io/desktopmetal 存在），但实测公开 JSON 接口返回 404——大概率是该公司在 Greenhouse 后台关闭了公开 API 读取权限（招聘页本身公开不代表 API 一定开放）。暂时会一直抓到 0 个职位，不影响其他公司"
   - name: "Formlabs"
     ats: "greenhouse"
     token: "formlabs"
@@ -89,6 +90,7 @@ companies:
   - name: "SprintRay"
     ats: "greenhouse"
     token: "sprintray"
+    note: "token 已确认正确（招聘页 job-boards.greenhouse.io/sprintray 存在，能看到实际职位），但实测公开 JSON 接口返回 404，原因同 Desktop Metal——大概率该公司关闭了公开 API 读取权限"
   - name: "Glidewell"
     ats: "none"
     token: null

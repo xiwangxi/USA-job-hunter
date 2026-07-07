@@ -61,7 +61,8 @@ scoring:
   # Anthropic 模型名。原始需求文档中写的 "claude-sonnet-4-6" 并非一个真实存在的模型 ID，
   # 这里改用当前实际可用的 claude-sonnet-5；后续如有更新模型可直接改这一行，无需改代码。
   model: "claude-sonnet-5"
-  max_tokens: 300
+  # 300 在实测中偶尔会把中文 one_line_reason 截断导致 JSON 解析失败，调大到 500 留出余量
+  max_tokens: 500
   # 入选邮件所需的最低分数
   score_threshold: 60
   # sponsorship_likelihood 取值为该列表之一时，无论分数多高都不进入邮件
