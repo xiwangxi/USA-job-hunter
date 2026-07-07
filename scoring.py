@@ -20,6 +20,9 @@ JSON 格式必须严格如下：
 - sponsorship_likelihood：根据职位描述判断该公司/职位是否可能为国际候选人提供工作签证担保。
   如果描述中明确提到提供签证担保，为 "likely"；如果没有任何相关信息，为 "unclear"；
   如果有间接迹象表明不太可能（例如强调本地候选人优先、政府/国防相关但未明确要求安全审查等），为 "unlikely"。
+  如果提供了"该公司历史签证担保数据"，应作为重要参考：历史上有过多次 H-1B/E-3 担保记录的公司，
+  即使职位描述里没提签证的事，也不应该仅因此判为 unlikely；反之历史记录里完全查不到、
+  又在描述中有不提供担保暗示的，应更倾向于 unlikely。
 - seniority_fit：判断该职位级别是否适合候选人（不含实习生/学生工，不含总监/VP 及以上）。
 """
 
@@ -30,6 +33,7 @@ USER_PROMPT_TEMPLATE = """[候选人档案]
 职位名称: {title}
 公司: {company}
 地点: {location}
+{sponsorship_history}
 职位描述:
 {description}
 """
@@ -80,6 +84,18 @@ def _parse_response(text: str) -> dict | None:
     }
 
 
+def _format_sponsorship_history(history: dict | None) -> str:
+    if not history:
+        return ""
+    case_count = history.get("case_count", 0)
+    certified_count = history.get("certified_count", 0)
+    rate = f"{certified_count / case_count:.0%}" if case_count else "N/A"
+    return (
+        f"该公司历史签证担保数据（DOL 公开 LCA/H-1B 披露数据，单个季度快照）："
+        f"共 {case_count} 起 H-1B/E-3 相关申请，其中 {certified_count} 起获批（约 {rate}）。\n"
+    )
+
+
 def score_job(
     client: anthropic.Anthropic,
     *,
@@ -87,6 +103,7 @@ def score_job(
     max_tokens: int,
     candidate_profile: str,
     job: dict,
+    sponsorship_history: dict | None = None,
 ) -> dict | None:
     """Return {score, sponsorship_likelihood, seniority_fit, one_line_reason} or None on failure."""
     prompt = USER_PROMPT_TEMPLATE.format(
@@ -94,6 +111,7 @@ def score_job(
         title=job.get("title", ""),
         company=job.get("company", ""),
         location=job.get("location", ""),
+        sponsorship_history=_format_sponsorship_history(sponsorship_history),
         description=(job.get("description") or "")[:6000],
     )
     try:
