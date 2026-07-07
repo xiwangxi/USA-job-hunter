@@ -96,6 +96,7 @@ def run(config: dict, dry_run: bool) -> int:
             sponsorship_data.refresh_if_stale(
                 conn,
                 dataset_id=sponsorship_cfg.get("dataset_id", ""),
+                search_query=sponsorship_cfg.get("search_query", "H-1B LCA disclosure data OFLC"),
                 resource_url=sponsorship_cfg.get("resource_url", ""),
                 max_age_days=sponsorship_cfg.get("refresh_max_age_days", 30),
             )

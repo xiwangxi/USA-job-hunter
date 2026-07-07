@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS sponsorship_meta (
 """
 
 CKAN_PACKAGE_SHOW_URL = "https://catalog.data.gov/api/3/action/package_show"
+CKAN_PACKAGE_SEARCH_URL = "https://catalog.data.gov/api/3/action/package_search"
 
 EMPLOYER_NAME_CANDIDATES = ["EMPLOYER_NAME", "EMPLOYER NAME", "PETITIONER_NAME", "EMPLOYER_NAME (PETITIONER)"]
 CASE_STATUS_CANDIDATES = ["CASE_STATUS", "STATUS"]
@@ -87,19 +88,7 @@ def is_stale(conn: sqlite3.Connection, max_age_days: int) -> bool:
     return (datetime.now(timezone.utc) - last_dt).days >= max_age_days
 
 
-def _discover_resource_url(dataset_id: str) -> str | None:
-    try:
-        resp = requests.get(CKAN_PACKAGE_SHOW_URL, params={"id": dataset_id}, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.RequestException:
-        logger.exception("Failed to query data.gov CKAN API for dataset %s", dataset_id)
-        return None
-    except ValueError:
-        logger.exception("data.gov CKAN API returned non-JSON response for dataset %s", dataset_id)
-        return None
-
-    resources = (data.get("result") or {}).get("resources", [])
+def _pick_best_h1b_resource(resources: list) -> tuple | None:
     candidates = []
     for res in resources:
         name = res.get("name", "") or ""
@@ -111,15 +100,54 @@ def _discover_resource_url(dataset_id: str) -> str | None:
         match = _PERIOD_RE.search(name)
         sort_key = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
         candidates.append((sort_key, res.get("url"), name))
-
     if not candidates:
-        logger.warning("Could not find an H-1B disclosure resource in data.gov dataset %s", dataset_id)
+        return None
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    return candidates[0]
+
+
+def _discover_resource_url(dataset_id: str, search_query: str) -> str | None:
+    # Fast path: caller knows the exact CKAN package slug.
+    if dataset_id:
+        try:
+            resp = requests.get(CKAN_PACKAGE_SHOW_URL, params={"id": dataset_id}, timeout=30)
+            resp.raise_for_status()
+            resources = (resp.json().get("result") or {}).get("resources", [])
+            best = _pick_best_h1b_resource(resources)
+            if best:
+                logger.info("Selected H-1B disclosure resource via package_show(%s): %s", dataset_id, best[2])
+                return best[1]
+            logger.warning("Dataset %s exists but has no matching H-1B resource; falling back to package_search", dataset_id)
+        except requests.RequestException:
+            logger.warning("package_show failed for dataset %s (%s); falling back to package_search", dataset_id, "network/HTTP error")
+        except ValueError:
+            logger.warning("package_show returned non-JSON for dataset %s; falling back to package_search", dataset_id)
+
+    # Resilient fallback: search by keywords instead of relying on an exact,
+    # easily-outdated package slug (data.gov dataset slugs/ids do change).
+    try:
+        resp = requests.get(CKAN_PACKAGE_SEARCH_URL, params={"q": search_query, "rows": 10}, timeout=30)
+        resp.raise_for_status()
+        results = ((resp.json().get("result") or {}).get("results")) or []
+    except requests.RequestException:
+        logger.exception("data.gov package_search failed for query %r", search_query)
+        return None
+    except ValueError:
+        logger.exception("data.gov package_search returned non-JSON response for query %r", search_query)
         return None
 
-    candidates.sort(key=lambda c: c[0], reverse=True)
-    best_key, best_url, best_name = candidates[0]
-    logger.info("Selected H-1B disclosure resource via data.gov: %s", best_name)
-    return best_url
+    best_overall = None
+    for pkg in results:
+        best = _pick_best_h1b_resource(pkg.get("resources", []))
+        if best and (best_overall is None or best[0] > best_overall[0]):
+            best_overall = best
+
+    if not best_overall:
+        logger.warning("package_search for %r returned no matching H-1B disclosure resource", search_query)
+        return None
+
+    logger.info("Selected H-1B disclosure resource via package_search: %s", best_overall[2])
+    return best_overall[1]
 
 
 def _resolve_column(header_row: list, candidates: list[str]) -> int | None:
@@ -177,13 +205,20 @@ def _download_and_aggregate(url: str) -> dict[str, dict] | None:
     return stats
 
 
-def refresh_if_stale(conn: sqlite3.Connection, *, dataset_id: str, resource_url: str = "", max_age_days: int = 30) -> bool:
+def refresh_if_stale(
+    conn: sqlite3.Connection,
+    *,
+    dataset_id: str = "",
+    search_query: str = "H-1B LCA disclosure data OFLC",
+    resource_url: str = "",
+    max_age_days: int = 30,
+) -> bool:
     """Best-effort refresh of the employer sponsorship lookup table. Never raises."""
     _ensure_schema(conn)
     if not is_stale(conn, max_age_days):
         return False
 
-    url = resource_url or _discover_resource_url(dataset_id)
+    url = resource_url or _discover_resource_url(dataset_id, search_query)
     if not url:
         logger.warning("No LCA disclosure resource URL available; skipping sponsorship-data refresh")
         return False
